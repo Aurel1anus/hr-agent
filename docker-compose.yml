@@ -7,7 +7,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - hr-data:/app/data
+      - ./backend/data:/app/data
     environment:
       DATABASE_URL: sqlite:///./data/hr_recruiting.db
     restart: unless-stopped
@@ -23,6 +23,3 @@ services:
     ports:
       - "8080:80"
     restart: unless-stopped
-
-volumes:
-  hr-data:

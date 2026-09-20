@@ -13,6 +13,7 @@ backend/**/*.so
 backend/*.db
 backend/*.sqlite
 backend/*.sqlite3
+backend/data/
 
 # Environment secrets (keep example files tracked)
 .env

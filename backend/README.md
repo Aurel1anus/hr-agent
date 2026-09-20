@@ -7,7 +7,7 @@ cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --reload-exclude data --port 8000
 ```
 
 接口文档：http://localhost:8000/docs
@@ -30,4 +30,6 @@ docker compose up --build
 docker compose down
 ```
 
-业务数据保存在 Docker volume `hr-v2_hr-data` 中，重启容器不会丢失。
+业务数据保存在项目的 `backend/data/` 中，重启容器不会丢失。该目录已被 Git 忽略；需要重置演示数据时，先停止服务再删除其中的数据库和简历文件。
+
+本地开发启用热重载时，务必使用上面的 `--reload-exclude data` 参数；否则新增或删除简历文件会触发后端重启，并清理尚未确认的简历草稿。
