@@ -2,7 +2,8 @@ $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Push-Location (Join-Path $repoRoot "backend")
 try {
     python -m pip install -r requirements.txt
-    python -c "from app.core.migrations import upgrade_database; print('无需数据库升级。' if upgrade_database() is None else '已完成备份与数据库升级。')"
+    python -c "from app.core.migrations import upgrade_database; backup=upgrade_database(); print('Database upgraded; backup: ' + str(backup) if backup else 'Database is current.')"
+    if ($LASTEXITCODE -ne 0) { throw "Database migration failed." }
 }
 finally {
     Pop-Location
