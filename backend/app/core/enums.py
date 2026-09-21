@@ -7,5 +7,6 @@ class BlockedBy(str, Enum): NONE="none"; HR="hr"; CANDIDATE="candidate"; INTERVI
 class TaskStatus(str, Enum): TODO="todo"; DONE="done"; CANCELLED="cancelled"
 class Priority(str, Enum): LOW="low"; NORMAL="normal"; HIGH="high"
 class InterviewMode(str, Enum): ONLINE="online"; OFFLINE="offline"
-class InterviewStatus(str, Enum): SCHEDULED="scheduled"; COMPLETED="completed"; CANCELLED="cancelled"
+class InterviewStatus(str, Enum): SCHEDULING="scheduling"; SCHEDULED="scheduled"; COMPLETED="completed"; CANCELLED="cancelled"
+class InterviewResult(str, Enum): PENDING="pending"; PASS="pass"; NEXT_ROUND="next_round"; REJECT="reject"
 class ResumeParseStatus(str, Enum): UPLOADED="uploaded"; PARSED="parsed"; CONFIRMED="confirmed"

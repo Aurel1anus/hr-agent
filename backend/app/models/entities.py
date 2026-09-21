@@ -17,6 +17,7 @@ from app.core.database import Base
 from app.core.enums import (
     BlockedBy,
     InterviewMode,
+    InterviewResult,
     InterviewStatus,
     JobStatus,
     PipelineStage,
@@ -93,6 +94,7 @@ class Application(Base):
     relocation_accepted: Mapped[bool | None] = mapped_column(Boolean)
     commute_minutes: Mapped[int | None] = mapped_column(Integer)
     rejection_reason: Mapped[str | None] = mapped_column(Text)
+    current_interview_id: Mapped[int | None] = mapped_column(ForeignKey("interviews.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, onupdate=datetime.now
@@ -104,7 +106,7 @@ class Application(Base):
         back_populates="application", cascade="all, delete-orphan"
     )
     interviews: Mapped[list["Interview"]] = relationship(
-        back_populates="application", cascade="all, delete-orphan"
+        back_populates="application", cascade="all, delete-orphan", foreign_keys="Interview.application_id"
     )
     activities: Mapped[list["Activity"]] = relationship(
         back_populates="application", cascade="all, delete-orphan"
@@ -134,23 +136,28 @@ class Interview(Base):
     __tablename__ = "interviews"
     id: Mapped[int] = mapped_column(primary_key=True)
     application_id: Mapped[int] = mapped_column(ForeignKey("applications.id"))
-    round: Mapped[int] = mapped_column(Integer, default=1)
+    round_number: Mapped[int] = mapped_column(Integer)
+    round_name: Mapped[str] = mapped_column(String(120))
+    candidate_availability: Mapped[str | None] = mapped_column(Text)
+    interviewer_availability: Mapped[str | None] = mapped_column(Text)
     interviewer_name: Mapped[str | None] = mapped_column(String(120))
-    start_at: Mapped[datetime] = mapped_column(DateTime)
-    end_at: Mapped[datetime | None] = mapped_column(DateTime)
-    mode: Mapped[InterviewMode] = mapped_column(
-        SAEnum(InterviewMode), default=InterviewMode.ONLINE
-    )
+    interviewer_id: Mapped[int | None] = mapped_column(Integer)
+    scheduled_start_at: Mapped[datetime | None] = mapped_column(DateTime)
+    scheduled_end_at: Mapped[datetime | None] = mapped_column(DateTime)
+    mode: Mapped[InterviewMode | None] = mapped_column(SAEnum(InterviewMode))
     location: Mapped[str | None] = mapped_column(String(300))
     meeting_url: Mapped[str | None] = mapped_column(String(500))
     status: Mapped[InterviewStatus] = mapped_column(
-        SAEnum(InterviewStatus), default=InterviewStatus.SCHEDULED
+        SAEnum(InterviewStatus), default=InterviewStatus.SCHEDULING
     )
+    feedback: Mapped[str | None] = mapped_column(Text)
+    result: Mapped[InterviewResult] = mapped_column(SAEnum(InterviewResult), default=InterviewResult.PENDING)
+    cancel_reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, onupdate=datetime.now
     )
-    application: Mapped[Application] = relationship(back_populates="interviews")
+    application: Mapped[Application] = relationship(back_populates="interviews", foreign_keys=[application_id])
 
 
 class Activity(Base):

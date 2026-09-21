@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.database import get_db
 from app.core.enums import (
     BlockedBy,
+    InterviewResult,
     InterviewStatus,
     JobStatus,
     PipelineStage,
@@ -18,8 +19,11 @@ from app.schemas import (
     BlockedChange,
     CandidateIn,
     CandidatePatch,
-    InterviewIn,
-    InterviewPatch,
+    InterviewAvailabilityPatch,
+    InterviewCancel,
+    InterviewCreate,
+    InterviewFeedback,
+    InterviewSchedule,
     JobIn,
     JobPatch,
     NoteIn,
@@ -76,8 +80,8 @@ def dashboard(db: Session = Depends(get_db)):
             .select_from(Interview)
             .where(
                 Interview.status == InterviewStatus.SCHEDULED,
-                Interview.start_at >= start,
-                Interview.start_at < end,
+                Interview.scheduled_start_at >= start,
+                Interview.scheduled_start_at < end,
             )
         )
         or 0,
@@ -123,11 +127,11 @@ def today_interviews(db: Session = Depends(get_db)):
             selectinload(Interview.application).selectinload(Application.job),
         )
         .where(
-            Interview.start_at >= start,
-            Interview.start_at < end,
+            Interview.scheduled_start_at >= start,
+            Interview.scheduled_start_at < end,
             Interview.status == InterviewStatus.SCHEDULED,
         )
-        .order_by(Interview.start_at)
+        .order_by(Interview.scheduled_start_at)
     ).all()
     return [
         {
@@ -135,12 +139,24 @@ def today_interviews(db: Session = Depends(get_db)):
             "application_id": i.application_id,
             "candidate_name": i.application.candidate.name,
             "job_title": i.application.job.title,
-            "start_at": i.start_at,
+            "scheduled_start_at": as_shanghai(i.scheduled_start_at),
+            "start_at": as_shanghai(i.scheduled_start_at),
             "mode": i.mode,
             "interviewer_name": i.interviewer_name,
         }
         for i in rows
     ]
+
+
+@router.get("/dashboard/interviews/pending-confirmation")
+def pending_interviews(db: Session = Depends(get_db)):
+    rows = db.scalars(
+        select(Interview)
+        .options(selectinload(Interview.application).selectinload(Application.candidate), selectinload(Interview.application).selectinload(Application.job))
+        .where(Interview.status == InterviewStatus.SCHEDULED, Interview.scheduled_end_at < datetime.utcnow())
+        .order_by(Interview.scheduled_end_at)
+    ).all()
+    return [{"id": i.id, "application_id": i.application_id, "candidate_name": i.application.candidate.name, "job_title": i.application.job.title, "round_name": i.round_name, "scheduled_end_at": as_shanghai(i.scheduled_end_at)} for i in rows]
 
 
 @router.get("/dashboard/jobs")
@@ -270,11 +286,11 @@ def job_stats(job_id: int, db: Session = Depends(get_db)):
         "today_interviews": db.scalar(
             select(func.count())
             .select_from(Interview)
-            .join(Application)
+            .join(Application, Interview.application_id == Application.id)
             .where(
                 Application.job_id == job_id,
-                Interview.start_at >= datetime.combine(date.today(), time.min),
-                Interview.start_at
+                Interview.scheduled_start_at >= datetime.combine(date.today(), time.min),
+                Interview.scheduled_start_at
                 < datetime.combine(date.today() + timedelta(days=1), time.min),
             )
         )
@@ -491,6 +507,8 @@ def application_detail(application_id: int, db: Session = Depends(get_db)):
     return {
         "id": a.id,
         "stage": a.stage,
+        "current_interview_id": a.current_interview_id,
+        "current_interview": interview_view(next((i for i in a.interviews if i.id == a.current_interview_id), None)),
         "blocked_by": a.blocked_by,
         "waiting_note": a.waiting_note,
         "priority": a.priority,
@@ -509,7 +527,7 @@ def application_detail(application_id: int, db: Session = Depends(get_db)):
             task_view(t)
             for t in sorted(a.tasks, key=lambda x: x.created_at, reverse=True)
         ],
-        "interviews": [interview_view(i) for i in a.interviews],
+        "interviews": [interview_view(i) for i in sorted(a.interviews, key=lambda item: (item.round_number, item.created_at))],
         "activities": [
             {
                 "id": x.id,
@@ -731,15 +749,9 @@ def all_tasks(
 
 @router.post("/applications/{application_id}/interviews", status_code=201)
 def create_interview(
-    application_id: int, data: InterviewIn, db: Session = Depends(get_db)
+    application_id: int, data: InterviewCreate, db: Session = Depends(get_db)
 ):
-    a = get_or_404(db, Application, application_id)
-    i = Interview(application_id=application_id, **data.model_dump())
-    db.add(i)
-    a.stage = PipelineStage.INTERVIEW_SCHEDULED
-    a.blocked_by = BlockedBy.NONE
-    db.flush()
-    activity(db, a.id, "INTERVIEW_CREATED", f"创建第 {i.round} 轮面试")
+    i = InterviewService(db).create_round(application_id, **data.model_dump())
     db.commit()
     return interview_view(i)
 
@@ -752,45 +764,51 @@ def application_interviews(application_id: int, db: Session = Depends(get_db)):
         for i in db.scalars(
             select(Interview)
             .where(Interview.application_id == application_id)
-            .order_by(Interview.round)
+            .order_by(Interview.round_number, Interview.created_at)
         ).all()
     ]
 
 
 @router.patch("/interviews/{interview_id}")
 def patch_interview(
-    interview_id: int, data: InterviewPatch, db: Session = Depends(get_db)
+    interview_id: int, data: InterviewAvailabilityPatch, db: Session = Depends(get_db)
 ):
-    i = get_or_404(db, Interview, interview_id)
-    [setattr(i, k, v) for k, v in data.model_dump(exclude_unset=True).items()]
-    activity(db, i.application_id, "INTERVIEW_UPDATED", f"修改第 {i.round} 轮面试")
+    i = InterviewService(db).update_availability(interview_id, data.model_dump(exclude_unset=True))
     db.commit()
     return interview_view(i)
 
 
-@router.post("/interviews/{interview_id}/{action}")
-def interview_action(
-    interview_id: int,
-    action: str,
-    data: ReasonIn | None = None,
-    db: Session = Depends(get_db),
-):
-    i = get_or_404(db, Interview, interview_id)
-    a = i.application
-    if action == "complete":
-        i.status = InterviewStatus.COMPLETED
-        a.stage = PipelineStage.FEEDBACK_PENDING
-        a.blocked_by = BlockedBy.INTERVIEWER
-        typ = "INTERVIEW_COMPLETED"
-        msg = f"完成第 {i.round} 轮面试"
-    elif action == "cancel":
-        i.status = InterviewStatus.CANCELLED
-        a.stage = PipelineStage.SCHEDULING
-        typ = "INTERVIEW_CANCELLED"
-        msg = f"取消面试：{data.reason if data else ''}"
-    else:
-        raise HTTPException(404, detail="操作不存在")
-    activity(db, a.id, typ, msg)
+@router.get("/interviews/{interview_id}")
+def get_interview(interview_id: int, db: Session = Depends(get_db)):
+    return interview_view(get_or_404(db, Interview, interview_id))
+
+@router.post("/interviews/{interview_id}/schedule")
+def schedule_interview(interview_id: int, data: InterviewSchedule, db: Session = Depends(get_db)):
+    i = InterviewService(db).schedule(interview_id, data.model_dump())
+    db.commit()
+    return interview_view(i)
+
+@router.post("/interviews/{interview_id}/reschedule")
+def reschedule_interview(interview_id: int, data: InterviewSchedule, db: Session = Depends(get_db)):
+    i = InterviewService(db).schedule(interview_id, data.model_dump(), reschedule=True)
+    db.commit()
+    return interview_view(i)
+
+@router.post("/interviews/{interview_id}/complete")
+def complete_interview(interview_id: int, db: Session = Depends(get_db)):
+    i = InterviewService(db).complete(interview_id)
+    db.commit()
+    return interview_view(i)
+
+@router.post("/interviews/{interview_id}/feedback")
+def feedback_interview(interview_id: int, data: InterviewFeedback, db: Session = Depends(get_db)):
+    i = InterviewService(db).submit_feedback(interview_id, data.feedback, data.result, data.next_round_name)
+    db.commit()
+    return interview_view(i)
+
+@router.post("/interviews/{interview_id}/cancel")
+def cancel_interview(interview_id: int, data: InterviewCancel, db: Session = Depends(get_db)):
+    i = InterviewService(db).cancel(interview_id, data.reason, data.disposition)
     db.commit()
     return interview_view(i)
 

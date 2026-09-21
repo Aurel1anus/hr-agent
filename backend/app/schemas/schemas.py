@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from app.core.enums import BlockedBy, InterviewMode, PipelineStage, Priority
+from app.core.enums import BlockedBy, InterviewMode, InterviewResult, PipelineStage, Priority
 
 class Schema(BaseModel): model_config=ConfigDict(from_attributes=True)
 class JobIn(Schema):
@@ -24,11 +24,29 @@ class RecruitmentInfo(Schema):
     earliest_start_date:date|None=None; internship_months:int|None=Field(default=None,ge=0); days_per_week:int|None=Field(default=None,ge=1,le=7); salary_accepted:bool|None=None; relocation_required:bool|None=None; relocation_accepted:bool|None=None; commute_minutes:int|None=Field(default=None,ge=0)
 class TaskIn(Schema): title:str=Field(min_length=1,max_length=200); description:str|None=None; due_at:datetime|None=None; priority:Priority=Priority.NORMAL
 class TaskPatch(Schema): title:str|None=None; description:str|None=None; due_at:datetime|None=None; priority:Priority|None=None
-class InterviewIn(Schema):
-    round:int=Field(default=1,ge=1); interviewer_name:str|None=None; start_at:datetime; end_at:datetime|None=None; mode:InterviewMode=InterviewMode.ONLINE; location:str|None=None; meeting_url:str|None=None
-    @model_validator(mode="after")
-    def period(self):
-        if self.end_at and self.end_at<=self.start_at: raise ValueError("结束时间必须晚于开始时间")
-        return self
-class InterviewPatch(InterviewIn): start_at:datetime|None=None
+class InterviewCreate(Schema):
+    round_name: str = Field(min_length=1, max_length=120)
+    candidate_availability: str | None = Field(default=None, max_length=2000)
+    interviewer_availability: str | None = Field(default=None, max_length=2000)
+
+class InterviewAvailabilityPatch(Schema):
+    candidate_availability: str | None = Field(default=None, max_length=2000)
+    interviewer_availability: str | None = Field(default=None, max_length=2000)
+
+class InterviewSchedule(Schema):
+    scheduled_start_at: datetime
+    scheduled_end_at: datetime
+    interviewer_name: str = Field(min_length=1, max_length=120)
+    mode: InterviewMode
+    location: str | None = Field(default=None, max_length=300)
+    meeting_url: str | None = Field(default=None, max_length=500)
+
+class InterviewFeedback(Schema):
+    feedback: str | None = Field(default=None, max_length=5000)
+    result: InterviewResult
+    next_round_name: str | None = Field(default=None, max_length=120)
+
+class InterviewCancel(Schema):
+    reason: str | None = Field(default=None, max_length=500)
+    disposition: str = Field(pattern="^(reschedule|withdraw|reject)$")
 class NoteIn(Schema): content:str=Field(min_length=1,max_length=5000)

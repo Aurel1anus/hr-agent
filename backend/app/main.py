@@ -4,7 +4,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import router
-from app.core.database import Base, SessionLocal, engine, ensure_local_schema
+from app.core.database import SessionLocal
+from app.core.migrations import upgrade_database
 from app.services.seed_service import seed
 from app.services.resume_import_service import ResumeImportService
 
@@ -33,8 +34,7 @@ app.include_router(router)
 
 @app.on_event("startup")
 def startup():
-    Base.metadata.create_all(engine)
-    ensure_local_schema()
+    upgrade_database()
     with SessionLocal() as db:
         ResumeImportService.cleanup_drafts(db)
         seed(db)
