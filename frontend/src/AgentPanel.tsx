@@ -5,7 +5,7 @@ type Props = { applicationId: number; candidateId: number; notify: (x: string) =
 
 export default function AgentPanel({ applicationId, candidateId, notify }: Props) {
   const [loading, setLoading] = useState(false), [data, setData] = useState<any>(null), [memories, setMemories] = useState<any[]>([]);
-  const run = async () => { setLoading(true); try { const x = await api<any>(`/applications/${applicationId}/copilot`, { method: "POST" }); setData(x); const m = await api<any[]>(`/candidates/${candidateId}/memories`); setMemories(m); } catch (e) { notify(e instanceof Error ? e.message : "AI 分析失败"); } finally { setLoading(false); } };
+  const run = async () => { setLoading(true); try { const x = await api<any>(`/applications/${applicationId}/copilot`, { method: "POST" }); setData(x); if (x._ai?.status === "failed") notify("AI 分析暂时失败，请重试。"); else if (x._ai?.status === "degraded") notify("AI 建议已生成，但 AI 输出已自动修复"); const m = await api<any[]>(`/candidates/${candidateId}/memories`); setMemories(m); } catch (e) { notify(e instanceof Error ? e.message : "AI 分析失败"); } finally { setLoading(false); } };
   const approve = async (callId: number, payload: any) => { try { await api(`/agent/tool-calls/${callId}/approve`, { method: "POST", body: JSON.stringify(payload) }); notify("AI 建议已转为待办"); setData({ ...data, next_actions: [] }); } catch (e) { notify(e instanceof Error ? e.message : "执行失败"); } };
   return <section className="drawer-section agent-panel">
     <div className="drawer-section-title"><h3>AI Copilot</h3><button onClick={run} disabled={loading}>{loading ? "分析中..." : "生成建议"}</button></div>

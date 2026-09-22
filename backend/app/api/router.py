@@ -1,7 +1,8 @@
 from __future__ import annotations
 from datetime import date, datetime, time, timedelta
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
+import json
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 from app.core.database import get_db
@@ -37,7 +38,7 @@ from app.schemas import (
 )
 from app.services.service import *
 from app.services.resume_import_service import ResumeImportService
-from app.services.agent_service import assessment_view, copilot, create_assessment, create_todo_tool, generate_profile, memory_view, profile_view
+from app.services.agent_service import assessment_view, copilot, create_assessment, create_todo_tool, generate_profile, generate_profile_stream, memory_view, profile_view
 
 router = APIRouter()
 
@@ -189,9 +190,9 @@ def job_summary(db: Session, job: Job):
         "active_count": sum(a.stage in NORMAL_STAGES for a in apps),
         "stage_counts": stages,
         "today_task_count": sum(
-            t.due_at and t.due_at.date() == date.today() for t in todos
+            bool(t.due_at and t.due_at.date() == date.today()) for t in todos
         ),
-        "overdue_count": sum(t.due_at and t.due_at < now for t in todos),
+        "overdue_count": sum(bool(t.due_at and t.due_at < now) for t in todos),
     }
 
 
@@ -862,7 +863,21 @@ def search(q: str = Query(min_length=1), db: Session = Depends(get_db)):
 
 @router.post("/jobs/{job_id}/requirement-profile/generate")
 def generate_requirement_profile(job_id: int, data: RequirementGenerate, db: Session = Depends(get_db)):
-    return profile_view(generate_profile(db, get_or_404(db, Job, job_id), data.extra_notes))
+    profile, run = generate_profile(db, get_or_404(db, Job, job_id), data.extra_notes)
+    return profile_view(profile, run)
+
+
+@router.post("/jobs/{job_id}/requirement-profile/generate/stream")
+def stream_requirement_profile(job_id: int, data: RequirementGenerate, db: Session = Depends(get_db)):
+    job = get_or_404(db, Job, job_id)
+    events = generate_profile_stream(db, job, data.extra_notes)
+
+    def sse():
+        for event in events:
+            event_name = event.pop("event")
+            yield f"event: {event_name}\ndata: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
+
+    return StreamingResponse(sse(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @router.get("/jobs/{job_id}/requirement-profile")
@@ -896,7 +911,8 @@ def confirm_requirement_profile(profile_id: int, db: Session = Depends(get_db)):
 def application_assessment(application_id: int, db: Session = Depends(get_db)):
     app = db.scalar(select(Application).options(selectinload(Application.candidate), selectinload(Application.job)).where(Application.id == application_id))
     if not app: raise HTTPException(404, detail="资源不存在")
-    return assessment_view(create_assessment(db, app))
+    assessment, run = create_assessment(db, app)
+    return assessment_view(assessment, run)
 
 
 @router.get("/applications/{application_id}/assessment")

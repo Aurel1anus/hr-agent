@@ -10,7 +10,8 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    throw new Error(body?.detail ?? '请求失败，请重试。')
+    const detail = body?.detail
+    throw new Error(body?.message ?? (typeof detail === 'string' ? detail : detail?.message) ?? '请求失败，请重试。')
   }
   return response.status === 204 ? undefined as T : response.json() as Promise<T>
 }

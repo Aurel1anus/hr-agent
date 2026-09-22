@@ -186,6 +186,7 @@ export default function App() {
             id={jobId}
             open={setDrawer}
             add={() => setModal("candidate")}
+            notify={notify}
             revision={revision}
           />
         )}{" "}
@@ -581,11 +582,13 @@ function DetailPage({
   id,
   open,
   add,
+  notify,
   revision,
 }: {
   id: number;
   open: (id: number) => void;
   add: () => void;
+  notify: (message: string) => void;
   revision: number;
 }) {
   const [job, setJob] = useState<Job | null>(null),
@@ -664,7 +667,7 @@ function DetailPage({
           </div>
         ))}
       </div>
-      <RequirementPanel jobId={id} notify={() => window.alert("操作失败，请重试") /* page-level notice is intentionally local */} />
+      <RequirementPanel jobId={id} notify={notify} />
       <div className="kanban-toolbar">
         <div className="input">
           <Search size={17} />

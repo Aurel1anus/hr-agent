@@ -267,6 +267,43 @@ class AgentRun(Base):
     error_message: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime | None] = mapped_column(DateTime)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    provider: Mapped[str | None] = mapped_column(String(80))
+    prompt_version: Mapped[str | None] = mapped_column(String(40))
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    repair_attempted: Mapped[bool] = mapped_column(Boolean, default=False)
+    fallback_used: Mapped[bool] = mapped_column(Boolean, default=False)
+    error_stage: Mapped[str | None] = mapped_column(String(40))
+    error_type: Mapped[str | None] = mapped_column(String(80))
+
+
+class AIModelCall(Base):
+    __tablename__ = "ai_model_calls"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    agent_run_id: Mapped[int] = mapped_column(ForeignKey("agent_runs.id"), index=True)
+    provider: Mapped[str | None] = mapped_column(String(80))
+    model: Mapped[str] = mapped_column(String(80))
+    call_type: Mapped[str] = mapped_column(String(20), default="primary")
+    request_id: Mapped[str | None] = mapped_column(String(120))
+    prompt_version: Mapped[str | None] = mapped_column(String(40))
+    raw_response: Mapped[str | None] = mapped_column(Text)
+    finish_reason: Mapped[str | None] = mapped_column(String(40))
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class AIValidationError(Base):
+    __tablename__ = "ai_validation_errors"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    agent_run_id: Mapped[int] = mapped_column(ForeignKey("agent_runs.id"), index=True)
+    model_call_id: Mapped[int | None] = mapped_column(ForeignKey("ai_model_calls.id"), index=True)
+    stage: Mapped[str] = mapped_column(String(40))
+    error_type: Mapped[str] = mapped_column(String(80))
+    error_message: Mapped[str] = mapped_column(Text)
+    parsed_output: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    schema_name: Mapped[str | None] = mapped_column(String(120))
+    repair_attempted: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
 
 class AgentToolCall(Base):

@@ -1,4 +1,4 @@
-from app.models.entities import (Activity, AgentRun, AgentToolCall, Application, Candidate,
+from app.models.entities import (AIModelCall, AIValidationError, Activity, AgentRun, AgentToolCall, Application, Candidate,
     Interview, Job, Memory, RequirementProfile, Resume, ResumeAssessment, Task)
 
-__all__ = ["Activity", "AgentRun", "AgentToolCall", "Application", "Candidate", "Interview", "Job", "Memory", "RequirementProfile", "Resume", "ResumeAssessment", "Task"]
+__all__ = ["AIModelCall", "AIValidationError", "Activity", "AgentRun", "AgentToolCall", "Application", "Candidate", "Interview", "Job", "Memory", "RequirementProfile", "Resume", "ResumeAssessment", "Task"]

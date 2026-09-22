@@ -1,13 +1,15 @@
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.router import router
 from app.core.database import SessionLocal
 from app.core.migrations import upgrade_database
 from app.services.seed_service import seed
 from app.services.resume_import_service import ResumeImportService
+from app.services.agent_service import AIOperationError
 
 app = FastAPI(title="HR Recruiting MVP API", version="0.1.0")
 default_cors_origins = (
@@ -31,6 +33,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(router)
+
+
+@app.exception_handler(AIOperationError)
+async def ai_operation_error_handler(_: Request, exc: AIOperationError):
+    return JSONResponse(status_code=exc.status_code, content=exc.body())
 
 
 @app.on_event("startup")
