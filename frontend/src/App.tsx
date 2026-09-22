@@ -21,6 +21,8 @@ import {
 import { api, apiUrl } from "./api";
 import EditCandidate from "./EditCandidate";
 import ResumeImport from "./ResumeImport";
+import AgentPanel from "./AgentPanel";
+import RequirementPanel from "./RequirementPanel";
 import { InterviewPanel, type Interview } from "./InterviewPanel";
 import "./WaitSelector.css";
 
@@ -662,6 +664,7 @@ function DetailPage({
           </div>
         ))}
       </div>
+      <RequirementPanel jobId={id} notify={() => window.alert("操作失败，请重试") /* page-level notice is intentionally local */} />
       <div className="kanban-toolbar">
         <div className="input">
           <Search size={17} />
@@ -1147,6 +1150,7 @@ function Drawer({
           </button>
         </div>
       </section>
+      <AgentPanel applicationId={id} candidateId={d.candidate.id} notify={notify} />
       <section className="drawer-section">
         <h3>
           待办事项 <span>{d.tasks.length}</span>

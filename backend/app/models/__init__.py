@@ -1,3 +1,4 @@
-from app.models.entities import Activity, Application, Candidate, Interview, Job, Resume, Task
+from app.models.entities import (Activity, AgentRun, AgentToolCall, Application, Candidate,
+    Interview, Job, Memory, RequirementProfile, Resume, ResumeAssessment, Task)
 
-__all__ = ["Activity", "Application", "Candidate", "Interview", "Job", "Resume", "Task"]
+__all__ = ["Activity", "AgentRun", "AgentToolCall", "Application", "Candidate", "Interview", "Job", "Memory", "RequirementProfile", "Resume", "ResumeAssessment", "Task"]

@@ -13,7 +13,7 @@ from app.core.enums import (
     PipelineStage,
     TaskStatus,
 )
-from app.models import Activity, Application, Candidate, Interview, Job, Resume, Task
+from app.models import Activity, AgentRun, AgentToolCall, Application, Candidate, Interview, Job, Memory, RequirementProfile, Resume, ResumeAssessment, Task
 from app.schemas import (
     ApplicationCreate,
     BlockedChange,
@@ -33,9 +33,11 @@ from app.schemas import (
     StageChange,
     TaskIn,
     TaskPatch,
+    MemoryIn, RequirementGenerate, RequirementProfilePatch, ToolApproval,
 )
 from app.services.service import *
 from app.services.resume_import_service import ResumeImportService
+from app.services.agent_service import assessment_view, copilot, create_assessment, create_todo_tool, generate_profile, memory_view, profile_view
 
 router = APIRouter()
 
@@ -856,3 +858,93 @@ def search(q: str = Query(min_length=1), db: Session = Depends(get_db)):
             ).all()
         ],
     }
+
+
+@router.post("/jobs/{job_id}/requirement-profile/generate")
+def generate_requirement_profile(job_id: int, data: RequirementGenerate, db: Session = Depends(get_db)):
+    return profile_view(generate_profile(db, get_or_404(db, Job, job_id), data.extra_notes))
+
+
+@router.get("/jobs/{job_id}/requirement-profile")
+def get_requirement_profile(job_id: int, db: Session = Depends(get_db)):
+    get_or_404(db, Job, job_id)
+    profile = db.scalar(select(RequirementProfile).where(RequirementProfile.job_id == job_id).order_by(RequirementProfile.revision.desc()))
+    return profile_view(profile) if profile else None
+
+
+@router.put("/requirement-profiles/{profile_id}")
+def update_requirement_profile(profile_id: int, data: RequirementProfilePatch, db: Session = Depends(get_db)):
+    profile = get_or_404(db, RequirementProfile, profile_id)
+    values = data.model_dump()
+    mapping = {"must_have": "must_have_json", "preferred": "preferred_json", "skills": "skills_json", "soft_skills": "soft_skills_json", "negative_signals": "negative_signals_json", "verification_questions": "verification_questions_json"}
+    new_values = {"job_id": profile.job_id, "revision": profile.revision + 1, "raw_jd": profile.raw_jd, "raw_notes": profile.raw_notes, "must_have_json": profile.must_have_json, "preferred_json": profile.preferred_json, "skills_json": profile.skills_json, "soft_skills_json": profile.soft_skills_json, "negative_signals_json": profile.negative_signals_json, "verification_questions_json": profile.verification_questions_json, "ai_summary": profile.ai_summary, "status": "draft"}
+    for key, value in values.items():
+        if value is not None: new_values[mapping.get(key, key)] = [x.model_dump() if hasattr(x, "model_dump") else x for x in value] if key in mapping else value
+    profile.status = "archived"
+    current = RequirementProfile(**new_values); db.add(current); db.commit(); db.refresh(current)
+    return profile_view(current)
+
+
+@router.post("/requirement-profiles/{profile_id}/confirm")
+def confirm_requirement_profile(profile_id: int, db: Session = Depends(get_db)):
+    profile = get_or_404(db, RequirementProfile, profile_id)
+    profile.status = "confirmed"; profile.confirmed_at = datetime.now()
+    db.commit(); return profile_view(profile)
+
+
+@router.post("/applications/{application_id}/assessment")
+def application_assessment(application_id: int, db: Session = Depends(get_db)):
+    app = db.scalar(select(Application).options(selectinload(Application.candidate), selectinload(Application.job)).where(Application.id == application_id))
+    if not app: raise HTTPException(404, detail="资源不存在")
+    return assessment_view(create_assessment(db, app))
+
+
+@router.get("/applications/{application_id}/assessment")
+def get_application_assessment(application_id: int, db: Session = Depends(get_db)):
+    rows = db.scalars(select(ResumeAssessment).where(ResumeAssessment.application_id == application_id).order_by(ResumeAssessment.created_at.desc())).all()
+    return {"latest": assessment_view(rows[0]) if rows else None, "history": [assessment_view(x) for x in rows]}
+
+
+@router.post("/applications/{application_id}/assessment/regenerate")
+def regenerate_application_assessment(application_id: int, db: Session = Depends(get_db)):
+    return application_assessment(application_id, db)
+
+
+@router.get("/candidates/{candidate_id}/memories")
+def candidate_memories(candidate_id: int, db: Session = Depends(get_db)):
+    get_or_404(db, Candidate, candidate_id)
+    return [memory_view(x) for x in db.scalars(select(Memory).where(Memory.entity_type == "candidate", Memory.entity_id == candidate_id, Memory.deleted_at.is_(None)).order_by(Memory.created_at.desc())).all()]
+
+
+@router.post("/candidates/{candidate_id}/memories", status_code=201)
+def add_candidate_memory(candidate_id: int, data: MemoryIn, db: Session = Depends(get_db)):
+    get_or_404(db, Candidate, candidate_id)
+    memory = Memory(entity_type="candidate", entity_id=candidate_id, **data.model_dump())
+    db.add(memory); db.commit(); db.refresh(memory); return memory_view(memory)
+
+
+@router.put("/memories/{memory_id}")
+def update_memory(memory_id: int, data: MemoryIn, db: Session = Depends(get_db)):
+    memory = get_or_404(db, Memory, memory_id)
+    for key, value in data.model_dump().items(): setattr(memory, key, value)
+    db.commit(); return memory_view(memory)
+
+
+@router.delete("/memories/{memory_id}", status_code=204)
+def delete_memory(memory_id: int, db: Session = Depends(get_db)):
+    memory = get_or_404(db, Memory, memory_id); memory.deleted_at = datetime.now(); db.commit()
+
+
+@router.post("/applications/{application_id}/copilot")
+def application_copilot(application_id: int, db: Session = Depends(get_db)):
+    app = db.scalar(select(Application).options(selectinload(Application.candidate), selectinload(Application.job), selectinload(Application.tasks)).where(Application.id == application_id))
+    if not app: raise HTTPException(404, detail="资源不存在")
+    _, output = copilot(db, app)
+    return output
+
+
+@router.post("/agent/tool-calls/{tool_call_id}/approve")
+def approve_tool_call(tool_call_id: int, data: ToolApproval, db: Session = Depends(get_db)):
+    call = get_or_404(db, AgentToolCall, tool_call_id)
+    if call.tool_name != "create_todo": raise HTTPException(422, detail="当前 Tool 不允许执行。")
+    return task_view(create_todo_tool(db, call, data))

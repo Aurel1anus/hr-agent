@@ -10,3 +10,5 @@ pymupdf>=1.24,<2.0
 python-multipart>=0.0.9,<1.0
 tzdata; sys_platform == "win32"
 alembic
+openai>=1.50,<2.0
+python-dotenv>=1.0,<2.0

@@ -67,6 +67,7 @@ class ResumeImportService:
             sha256=sha256,
             parse_status="parsed",
             parsed_data={**parsed, "match": match},
+            extracted_text=text,
             parser_version=self.parser.version,
         )
         self.db.add(resume)

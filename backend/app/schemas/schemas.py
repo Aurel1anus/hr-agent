@@ -5,7 +5,7 @@ from app.core.enums import BlockedBy, InterviewMode, InterviewResult, PipelineSt
 
 class Schema(BaseModel): model_config=ConfigDict(from_attributes=True)
 class JobIn(Schema):
-    title:str=Field(min_length=1,max_length=120); department:str|None=None; location:str|None=None; salary_min:int|None=None; salary_max:int|None=None; description:str|None=None; owner_name:str|None=None
+    title:str=Field(min_length=1,max_length=120); department:str|None=None; location:str|None=None; salary_min:int|None=None; salary_max:int|None=None; description:str|None=None; jd_text:str|None=None; owner_name:str|None=None
     @model_validator(mode="after")
     def salary_range(self):
         if self.salary_min is not None and self.salary_max is not None and self.salary_min>self.salary_max: raise ValueError("最低薪资不能高于最高薪资")
@@ -50,3 +50,56 @@ class InterviewCancel(Schema):
     reason: str | None = Field(default=None, max_length=500)
     disposition: str = Field(pattern="^(reschedule|withdraw|reject)$")
 class NoteIn(Schema): content:str=Field(min_length=1,max_length=5000)
+
+class RequirementItem(Schema):
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(min_length=1, max_length=500)
+    evidence_required: bool = True
+
+class RequirementProfilePatch(Schema):
+    raw_jd: str | None = None
+    raw_notes: str | None = None
+    must_have: list[RequirementItem] = []
+    preferred: list[RequirementItem] = []
+    skills: list[str] = []
+    soft_skills: list[str] = []
+    negative_signals: list[str] = []
+    verification_questions: list[str] = []
+    ai_summary: str | None = None
+
+class RequirementGenerate(Schema):
+    extra_notes: str | None = None
+
+class AssessmentStrength(Schema):
+    requirement: str
+    evidence: str
+    status: str = "met"
+
+class AssessmentGap(Schema):
+    requirement: str
+    reason: str
+    status: str = "unknown"
+
+class AssessmentResult(Schema):
+    recommendation: str
+    overall_score: int = Field(ge=0, le=100)
+    strengths: list[AssessmentStrength] = []
+    gaps: list[AssessmentGap] = []
+    risks: list[str] = []
+    missing_information: list[str] = []
+    verification_questions: list[str] = []
+    summary: str
+
+class MemoryIn(Schema):
+    memory_type: str = Field(min_length=1, max_length=50)
+    content: str = Field(min_length=1, max_length=2000)
+    source_type: str = "hr_manual"
+    source_id: int | None = None
+    importance: int = Field(default=3, ge=1, le=5)
+    confidence: float = Field(default=1.0, ge=0, le=1)
+
+class ToolApproval(Schema):
+    title: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    due_at: datetime | None = None
+    priority: Priority | None = None

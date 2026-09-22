@@ -2,6 +2,8 @@
 
 本地开发默认使用 SQLite，首次启动会自动建表并写入演示数据。
 
+首次运行前，可复制 `backend/.env.example` 为 `backend/.env`，并填写 `AI_API_KEY`。前端可复制 `frontend/.env.example` 为 `frontend/.env` 配置后端地址。两个实际 `.env` 文件不会提交到 Git。
+
 ```powershell
 cd backend
 python -m venv .venv
